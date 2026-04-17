@@ -1,0 +1,116 @@
+--- a/drivers/net/dsa/realtek/rtl8365mb_l2.h
++++ b/drivers/net/dsa/realtek/rtl8365mb_l2.h
+@@ -0,0 +1,113 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/* L2 and FDB support for the rtl8365mb switch family
++ *
++ * Copyright (C) 2026 Luiz Angelo Daros de Luca <luizluca@gmail.com>
++ */
++
++#ifndef _RTL8365MB_L2_H
++#define _RTL8365MB_L2_H
++
++#include <linux/if_ether.h>
++#include <linux/types.h>
++
++#include "realtek.h"
++
++/* Max. number of entries in the L2 table. */
++#define RTL8365MB_L2_SIZE			0x07ff
++
++/* Max. number of entries in the L2 CAM. */
++#define RTL8365MB_L2_CAM_SIZE			64
++
++/* Learning limit maximum. */
++#define RTL8365MB_LEARN_LIMIT_MAX \
++		(RTL8365MB_L2_SIZE + RTL8365MB_L2_CAM_SIZE)
++
++/**
++ * struct rtl8365mb_l2_uc_key - key of a unicast entry in the L2 table
++ * @mac_addr: MAC address
++ * @ivl: independent VLAN learning
++ * @fid: filtering identifier
++ * @vid: VLAN identifier
++ */
++struct rtl8365mb_l2_uc_key {
++	unsigned char mac_addr[ETH_ALEN];
++	bool ivl;
++	u16 fid;
++	u16 vid;
++};
++
++/**
++ * struct rtl8365mb_l2_uc - content of a unicast entry in the L2 table
++ * @key: table key
++ * @port: source/destination port
++ * @age: hardware age value
++ * @priority: forwarding priority
++ * @sa_block: whether matching SA frames are blocked
++ * @da_block: whether matching DA frames are blocked
++ * @auth: authenticated/suspended state bit
++ * @is_static: whether the entry is static
++ * @sa_pri: whether source priority is enabled
++ * @fwd_pri: whether forwarding priority is enabled
++ * @efid: enhanced filtering identifier
++ */
++struct rtl8365mb_l2_uc {
++	struct rtl8365mb_l2_uc_key key;
++	u8 port;
++	u8 age;
++	u8 priority;
++	bool sa_block;
++	bool da_block;
++	bool auth;
++	bool is_static;
++	bool sa_pri;
++	bool fwd_pri;
++	u8 efid;
++};
++
++/**
++ * struct rtl8365mb_l2_mc_key - key of a multicast entry in the L2 table
++ * @mac_addr: MAC address
++ * @ivl: independent VLAN learning
++ * @fid: filtering identifier
++ * @vid: VLAN identifier
++ */
++struct rtl8365mb_l2_mc_key {
++	unsigned char mac_addr[ETH_ALEN];
++	bool ivl;
++	u16 fid;
++	u16 vid;
++};
++
++/**
++ * struct rtl8365mb_l2_mc - content of a multicast entry in the L2 table
++ * @key: table key
++ * @member: destination port mask
++ * @priority: forwarding priority
++ * @igmpidx: IGMP index
++ * @is_static: whether the entry is static
++ * @fwd_pri: whether forwarding priority is enabled
++ * @igmp_asic: whether IGMP ASIC handling is enabled
++ */
++struct rtl8365mb_l2_mc {
++	struct rtl8365mb_l2_mc_key key;
++	u16 member;
++	u8 priority;
++	u8 igmpidx;
++	bool is_static;
++	bool fwd_pri;
++	bool igmp_asic;
++};
++
++int rtl8365mb_l2_add_uc(struct realtek_priv *priv, int port,
++			const unsigned char *mac_addr, u8 efid, u16 vid);
++int rtl8365mb_l2_del_uc(struct realtek_priv *priv, int port,
++			const unsigned char *mac_addr, u8 efid, u16 vid);
++int rtl8365mb_l2_get_next_uc(struct realtek_priv *priv, int port,
++			     u16 *address, struct rtl8365mb_l2_uc *uc);
++int rtl8365mb_l2_add_mc(struct realtek_priv *priv, int port,
++			const unsigned char *mac_addr, u16 vid);
++int rtl8365mb_l2_del_mc(struct realtek_priv *priv, int port,
++			const unsigned char *mac_addr, u16 vid);
++int rtl8365mb_l2_flush(struct realtek_priv *priv, int port, u16 vid);
++
++#endif /* _RTL8365MB_L2_H */
