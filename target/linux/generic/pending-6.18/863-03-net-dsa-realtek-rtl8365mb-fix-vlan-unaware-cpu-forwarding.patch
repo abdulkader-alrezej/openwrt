@@ -1,0 +1,96 @@
+--- a/drivers/net/dsa/realtek/rtl8365mb_main.c
++++ b/drivers/net/dsa/realtek/rtl8365mb_main.c
+@@ -1766,6 +1766,10 @@ static int rtl8365mb_port_set_ingress_fi
+ 			0);
+ }
+ 
++static int
++rtl8365mb_port_set_vlan_egress_mode(struct realtek_priv *priv, int port,
++				    enum rtl8365mb_vlan_egress_mode mode);
++
+ static int rtl8365mb_port_vlan_filtering(struct dsa_switch *ds, int port,
+ 					 bool vlan_filtering,
+ 					 struct netlink_ext_ack *extack)
+@@ -1790,8 +1794,14 @@ static int rtl8365mb_port_vlan_filtering
+ 	}
+ 
+ 	/* If the port is not in the member set, the frame will be dropped */
+-	return rtl8365mb_port_set_ingress_filtering(priv, port,
+-						    vlan_filtering);
++	ret = rtl8365mb_port_set_ingress_filtering(priv, port,
++						   vlan_filtering);
++	if (ret)
++		return ret;
++
++	return rtl8365mb_port_set_vlan_egress_mode(priv, port,
++			vlan_filtering ? RTL8365MB_VLAN_EGRESS_MODE_ORIGINAL :
++					 RTL8365MB_VLAN_EGRESS_MODE_REAL_KEEP);
+ }
+ 
+ static int rtl8365mb_port_vlan_add(struct dsa_switch *ds, int port,
+@@ -1864,11 +1874,10 @@ rtl8365mb_port_set_vlan_egress_mode(stru
+ static int rtl8365mb_vlan_setup(struct dsa_switch *ds)
+ {
+ 	struct realtek_priv *priv = ds->priv;
+-	enum rtl8365mb_vlan_egress_mode mode;
+ 	struct dsa_port *dp;
+ 	int ret;
+ 
+-	dsa_switch_for_each_user_port(dp, ds) {
++	dsa_switch_for_each_available_port(dp, ds) {
+ 		/* Disable vlan-filtering for all ports */
+ 		ret = rtl8365mb_port_vlan_filtering(ds, dp->index, false, NULL);
+ 		if (ret) {
+@@ -1877,21 +1886,6 @@ static int rtl8365mb_vlan_setup(struct d
+ 				dp->index);
+ 			return ret;
+ 		}
+-
+-		/* The switch default is RTL8365MB_VLAN_EGRESS_MODE_REAL_KEEP,
+-		 * that forwards the packet as it was received. However,
+-		 * different untag settings will require the switch to update
+-		 * the tag.
+-		 */
+-		mode = RTL8365MB_VLAN_EGRESS_MODE_ORIGINAL;
+-		ret = rtl8365mb_port_set_vlan_egress_mode(priv, dp->index,
+-							  mode);
+-		if (ret) {
+-			dev_err(priv->dev,
+-				"Failed to set port %d egress mode\n",
+-				dp->index);
+-			return ret;
+-		}
+ 	}
+ 
+ 	/* VLAN is always enabled. */
+@@ -3014,6 +3008,7 @@ static int rtl8365mb_setup(struct dsa_sw
+ 	struct rtl8365mb *mb;
+ 	int ret;
+ 	int i;
++	u32 user_ports;
+ 
+ 	mb = priv->chip_data;
+ 	cpu = &mb->cpu;
+@@ -3055,6 +3050,7 @@ static int rtl8365mb_setup(struct dsa_sw
+ 		goto out_teardown_irq;
+ 
+ 	/* Configure ports */
++	user_ports = dsa_user_ports(ds);
+ 	for (i = 0; i < priv->num_ports; i++) {
+ 		struct rtl8365mb_port *p = &mb->ports[i];
+ 
+@@ -3067,8 +3063,12 @@ static int rtl8365mb_setup(struct dsa_sw
+ 		 */
+ 		rtl8365mb_port_stp_state_set(ds, i, BR_STATE_DISABLED);
+ 
+-		/* Forward only to the CPU */
+-		ret = rtl8365mb_port_set_isolation(priv, i, cpu->mask);
++		if ((cpu->mask & BIT(i)) == 0)
++			/* Forward only to the CPU */
++			ret = rtl8365mb_port_set_isolation(priv, i, cpu->mask);
++		else
++			/* Forward to all user ports */
++			ret = rtl8365mb_port_set_isolation(priv, i, user_ports);
+ 		if (ret)
+ 			goto out_teardown_irq;
+ 
